@@ -3,10 +3,25 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import getDataUri from "../utils/datauri.js";
 import cloudinary from "../utils/cloudinary.js";
+import { otpStore } from "./otp.controller.js";
+import crypto from "crypto";
+import { sendMail } from "../utils/sendMail.js";
+
+
 
 export const register = async (req, res) => {
     try {
-        const { fullname, email, phoneNumber, password, role } = req.body;
+        const { fullname, email, phoneNumber, password, role, otp } = req.body;
+
+       //  OTP validation
+       if (!otp || otpStore.get(email) !== otp) {
+        return res.status(400).json({
+            message: "Invalid or expired OTP",
+            success: false
+        });
+    }
+    
+    otpStore.delete(email); // OTP used — remove from store 
          
         if (!fullname || !email || !phoneNumber || !password || !role) {
             return res.status(400).json({
@@ -118,7 +133,12 @@ export const updateProfile = async (req, res) => {
         const file = req.file;
         // cloudinary ayega idhar
         const fileUri = getDataUri(file);
-        const cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+        // const cloudResponse = await cloudinary.uploader.upload(fileUri.content);
+        const cloudResponse = await cloudinary.uploader.upload(fileUri.content, {
+            folder: "resumes",
+            resource_type: "auto" // or just remove this line
+        });
+        
 
 
 
@@ -147,10 +167,8 @@ export const updateProfile = async (req, res) => {
             user.profile.resume = cloudResponse.secure_url // save the cloudinary url
             user.profile.resumeOriginalName = file.originalname // Save the original file name
         }
-
-
+        
         await user.save();
-
         user = {
             _id: user._id,
             fullname: user.fullname,
@@ -169,3 +187,53 @@ export const updateProfile = async (req, res) => {
         console.log(error);
     }
 }
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+        // generate token
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+        // save hashed token and expiry in DB
+        user.resetPasswordToken = hashedToken;
+        user.resetPasswordExpire = Date.now() + 30 * 60 * 1000; // valid for 30 mins
+        await user.save();
+
+        // create reset URL
+        const resetURL = `http://localhost:5173/reset-password/${resetToken}`;
+        await sendMail(user.email, resetURL);
+
+        res.status(200).json({
+            success: true,
+            message: "Reset link sent to your email",
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Internal Server Error" });
+    }
+};
+
+
+export const resetPassword = async (req, res) => {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    const user = await User.findOne({
+        resetPasswordToken: hashedToken,
+        resetPasswordExpire: { $gt: Date.now() },
+    });
+
+    if (!user) return res.status(400).json({ message: "Invalid or expired token", success: false });
+
+    user.password = await bcrypt.hash(password, 10);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+
+    await user.save();
+
+    res.status(200).json({ message: "Password reset successfully", success: true });
+};

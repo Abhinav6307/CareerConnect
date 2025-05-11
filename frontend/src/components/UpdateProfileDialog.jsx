@@ -95,6 +95,7 @@ const UpdateProfileDialog = ({ open, setOpen }) => {
                                     name="email"
                                     type="email"
                                     value={input.email}
+                                    readOnly
                                     onChange={changeEventHandler}
                                     className="col-span-3"
                                 />

@@ -14,6 +14,9 @@ import AdminJobs from "./components/admin/AdminJobs";
 import PostJob from './components/admin/PostJob'
 import Applicants from './components/admin/Applicants'
 import ProtectedRoute from './components/admin/ProtectedRoute'
+import ForgotPassword from './components/auth/ForgotPassword'
+import ResetPassword from './components/auth/ResetPassword'
+import Chatbot from './components/Chatbot'
 
 
 const appRouter = createBrowserRouter([
@@ -70,6 +73,19 @@ const appRouter = createBrowserRouter([
     path:"/admin/jobs/:id/applicants",
     element:<ProtectedRoute><Applicants/></ProtectedRoute> 
   },
+  {
+   path:"/forgot-password",
+   element:<ForgotPassword />
+  },
+  {
+    path:"/reset-password/:token",
+    element:<ResetPassword />
+   },
+   {
+    path:"/chatbot",
+    element:<Chatbot />
+   }
+
 
 ])
 function App() {
